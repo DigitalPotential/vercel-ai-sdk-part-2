@@ -5,7 +5,6 @@ import { streamObject } from "ai";
 import { saveArticleToDatabase } from "./services/articleService.js";
 import cors from "cors";
 import { GenerateContentRequest, RequestSchema, ResponseSchema, GeneratedContent } from "./types.js";
-import prisma from "./db/prisma.js";
 
 dotenv.config();
 
@@ -21,7 +20,7 @@ async function generateContent(
   requestData: GenerateContentRequest,
   res: express.Response
 ) {
-  const { topic, audience, tone, length } = RequestSchema.parse(requestData);
+  const { topic, audience, tone, length } = requestData;
 
   const systemPrompt = `
   Du är en expert på att skriva artiklar.

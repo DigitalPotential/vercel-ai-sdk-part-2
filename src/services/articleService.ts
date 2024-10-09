@@ -1,11 +1,11 @@
 import { PrismaClient } from "@prisma/client";
-import { GenerateContentRequest } from "../types.js";
+import { GenerateContentRequest, GeneratedContent } from "../types.js";
 
 const prisma = new PrismaClient();
 
 export async function saveArticleToDatabase(
   requestData: GenerateContentRequest,
-  generatedContent: { title: string; content: string }
+  generatedContent: GeneratedContent
 ) {
   try {
     const { topic, audience, tone, length } = requestData;
