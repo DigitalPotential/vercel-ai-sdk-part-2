@@ -1,13 +1,13 @@
 import express from "express";
 import dotenv from "dotenv";
-import { z } from "zod";
 import { openai } from "@ai-sdk/openai";
 import { streamObject } from "ai";
+import { saveArticleToDatabase } from "./services/articleService.js";
+import cors from "cors";
+import { GenerateContentRequest, RequestSchema, ResponseSchema, GeneratedContent } from "./types.js";
+import prisma from "./db/prisma.js";
 
 dotenv.config();
-
-//cors
-import cors from "cors";
 
 const app = express();
 app.use(express.json());
@@ -17,27 +17,11 @@ app.use(
   })
 );
 
-// Define zod request schema
-const RequestSchema = z.object({
-  topic: z.string(),
-  audience: z.string(),
-  tone: z.enum(["formal", "casual", "humorous"]),
-  length: z.enum(["short", "medium", "long"]),
-});
-
-type GenerateContentRequest = z.infer<typeof RequestSchema>;
-
-// Define zodresponse schema
-const responseSchema = z.object({
-  title: z.string(),
-  content: z.string(),
-});
-
 async function generateContent(
-  params: GenerateContentRequest,
+  requestData: GenerateContentRequest,
   res: express.Response
 ) {
-  const { topic, audience, tone, length } = RequestSchema.parse(params);
+  const { topic, audience, tone, length } = RequestSchema.parse(requestData);
 
   const systemPrompt = `
   Du är en expert på att skriva artiklar.
@@ -54,7 +38,7 @@ async function generateContent(
     model: openai("gpt-4o"),
     prompt: prompt,
     system: systemPrompt,
-    schema: responseSchema,
+    schema: ResponseSchema,
   });
 
   // Set headers for streaming
@@ -64,9 +48,19 @@ async function generateContent(
     Connection: "keep-alive",
   });
 
+  let generatedContent: GeneratedContent = { title: "", content: "" };
+
   // Stream the partial objects
   for await (const partialObject of partialObjectStream) {
     res.write(`data: ${JSON.stringify(partialObject)}\n\n`);
+    generatedContent = { ...generatedContent, ...partialObject };
+  }
+
+  // Save the data to the database
+  try {
+    await saveArticleToDatabase(requestData, generatedContent);
+  } catch (error) {
+    console.error("Failed to save article:", error);
   }
 
   res.write("data: [DONE]\n\n");
@@ -75,8 +69,8 @@ async function generateContent(
 
 app.post("/generate-content", async (req, res) => {
   try {
-    const params = RequestSchema.parse(req.body);
-    await generateContent(params, res);
+    const requestData = RequestSchema.parse(req.body);
+    await generateContent(requestData, res);
   } catch (error) {
     console.error("Ett fel har inträffat:", error);
     res.status(500).json({ error: "Ett internt serverfel inträffade" });
@@ -84,6 +78,6 @@ app.post("/generate-content", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server körs på port ${PORT}`);
 });
